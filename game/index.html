@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Orbit Dodge — built from one prompt</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #05081a; height: 100%; overflow: hidden; }
+  body { display: flex; align-items: center; justify-content: center; font-family: monospace; }
+  #wrap { position: relative; width: min(100vw, 56.25vh); height: min(100vh, 177.78vw); }
+  canvas { width: 100%; height: 100%; display: block; touch-action: none; }
+  #hint { position: absolute; left: 0; right: 0; bottom: 8px; text-align: center;
+    color: #9aa3ff; font-size: 12px; pointer-events: none; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game" width="540" height="960"></canvas>
+  <div id="hint">made by an AI agent from one prompt · for make.fun</div>
+</div>
+<script src="engine.js"></script>
+<script>
+(function () {
+  var canvas = document.getElementById('game');
+  var raw = canvas.getContext('2d');
+  // Small helpers so the engine can draw triangles and circles.
+  var ctx = new Proxy(raw, {
+    get: function (t, k) {
+      if (k === 'fillCircle') return function (x, y, r) {
+        t.beginPath(); t.arc(x, y, r, 0, Math.PI * 2); t.fill();
+      };
+      if (k === 'fillTriangle') return function (x1, y1, x2, y2, x3, y3) {
+        t.beginPath(); t.moveTo(x1, y1); t.lineTo(x2, y2); t.lineTo(x3, y3);
+        t.closePath(); t.fill();
+      };
+      var v = t[k];
+      return typeof v === 'function' ? v.bind(t) : v;
+    },
+    set: function (t, k, v) { t[k] = v; return true; }
+  });
+
+  var game = createGame({ seed: (Date.now() % 100000) | 0 });
+  var keys = {};
+
+  function press() {
+    if (game.state === 'title' || game.state === 'won' || game.state === 'lost') game.start();
+  }
+  window.addEventListener('keydown', function (e) {
+    if (e.code === 'Space' || e.code === 'Enter') { press(); e.preventDefault(); }
+    keys[e.code] = true;
+    game.input.left = !!(keys.ArrowLeft || keys.KeyA);
+    game.input.right = !!(keys.ArrowRight || keys.KeyD);
+  });
+  window.addEventListener('keyup', function (e) {
+    keys[e.code] = false;
+    game.input.left = !!(keys.ArrowLeft || keys.KeyA);
+    game.input.right = !!(keys.ArrowRight || keys.KeyD);
+  });
+  function pointerX(e) {
+    var r = canvas.getBoundingClientRect();
+    var cx = (e.touches ? e.touches[0].clientX : e.clientX) - r.left;
+    return cx / r.width * 540;
+  }
+  canvas.addEventListener('pointerdown', function (e) {
+    press();
+    game.input.x = pointerX(e);
+    e.preventDefault();
+  });
+  canvas.addEventListener('pointermove', function (e) {
+    if (game.input.x != null) game.input.x = pointerX(e);
+  });
+  window.addEventListener('pointerup', function () { game.input.x = null; });
+
+  var last = performance.now();
+  function frame(now) {
+    var dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    game.update(dt);
+    game.draw(ctx);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
